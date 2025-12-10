@@ -1,10 +1,20 @@
-// lib/main.dart
 import 'package:flutter/material.dart';
-import 'screens/home_screen.dart';
-import 'screens/history_screen.dart';
+import 'package:provider/provider.dart';
+import 'ui/home/home_view_model.dart';
+import 'ui/history/history_view_model.dart';
+import 'ui/home/home_screen.dart';
+import 'ui/history/history_screen.dart';
 
 void main() {
-  runApp(const MainApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => HomeViewModel()),
+        ChangeNotifierProvider(create: (_) => HistoryViewModel()..loadHistory()),
+      ],
+      child: const MainApp(),
+    ),
+  );
 }
 
 class MainApp extends StatelessWidget {
@@ -14,16 +24,12 @@ class MainApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Мини-Словарь',
-      theme: ThemeData(
-        primarySwatch: Colors.blue,
-        useMaterial3: true,
-      ),
+      theme: ThemeData(useMaterial3: true, primarySwatch: Colors.blue),
       home: const MainScreenWrapper(),
     );
   }
 }
 
-// Обёртка для управления состоянием и навигацией
 class MainScreenWrapper extends StatefulWidget {
   const MainScreenWrapper({super.key});
 
@@ -32,58 +38,45 @@ class MainScreenWrapper extends StatefulWidget {
 }
 
 class _MainScreenWrapperState extends State<MainScreenWrapper> {
-  int _currentIndex = 0; // 0 — Главная, 1 — История
+  int _currentIndex = 0;
 
-  // Слово, которое передаётся из истории обратно на главный экран
-  String? _prefilledWord;
+  void _onItemTapped(int index) {
+    if (index == 1) {
+      context.read<HistoryViewModel>().loadHistory();
+    }
+    setState(() => _currentIndex = index);
+  }
 
-  // Метод для перехода на главный экран с предзаполненным словом
-  void goToHomeWithWord(String word) {
-    setState(() {
-      _prefilledWord = word;
-      _currentIndex = 0;
-    });
+  void _onWordFromHistory(String word) {
+    final homeVm = context.read<HomeViewModel>();
+    final historyVm = context.read<HistoryViewModel>();
+    homeVm.searchWord(word);
+    historyVm.loadHistory();
+    setState(() => _currentIndex = 0);
   }
 
   @override
   Widget build(BuildContext context) {
-    Widget currentScreen;
-
-    if (_currentIndex == 0) {
-      currentScreen = HomeScreen(
-        prefilledWord: _prefilledWord,
-        onSearch: (word) {
-          // Пока ничего не сохраняем, просто фиксируем в UI
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Поиск: $word')),
-          );
-        },
-      );
-    } else {
-      currentScreen = HistoryScreen(
-        onWordTap: goToHomeWithWord,
-      );
-    }
-
     return Scaffold(
-      body: currentScreen,
+      body: IndexedStack(
+        index: _currentIndex,
+        children: [
+          HomeScreen(onSearchComplete: () {}),
+          HistoryScreen(
+          onWordTap: (word) {
+            context.read<HomeViewModel>().searchWord(word);
+            context.read<HistoryViewModel>().loadHistory();
+            setState(() => _currentIndex = 0);
+          },
+          ),
+        ],
+      ),
       bottomNavigationBar: BottomNavigationBar(
         currentIndex: _currentIndex,
-        onTap: (index) {
-          setState(() {
-            _currentIndex = index;
-            _prefilledWord = null; // сброс при переключении
-          });
-        },
+        onTap: _onItemTapped,
         items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.home),
-            label: 'Главная',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.history),
-            label: 'История',
-          ),
+          BottomNavigationBarItem(icon: Icon(Icons.home), label: 'Главная'),
+          BottomNavigationBarItem(icon: Icon(Icons.history), label: 'История'),
         ],
       ),
     );
